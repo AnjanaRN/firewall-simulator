@@ -44,6 +44,17 @@ def get_valid_action():
         print("Invalid action! Enter ALLOW or BLOCK.")
 
 
+# Get a valid protocol
+def get_valid_protocol():
+    while True:
+        protocol = input("Enter protocol (TCP/UDP): ").upper()
+
+        if protocol in ["TCP", "UDP"]:
+            return protocol
+
+        print("Invalid protocol! Enter TCP or UDP.")
+
+
 # Add a firewall rule
 def add_rule():
     ip = input("Enter IP address: ")
@@ -53,9 +64,10 @@ def add_rule():
         return
 
     port = get_valid_port()
+    protocol = get_valid_protocol()
     action = get_valid_action()
 
-    rules.append((ip, port, action))
+    rules.append((ip, port, protocol, action))
 
     print("Rule added successfully!")
 
@@ -69,9 +81,13 @@ def check_connection():
         return
 
     port = get_valid_port()
+    protocol = get_valid_protocol()
 
-    for rule_ip, rule_port, action in rules:
-        if ip == rule_ip and port == rule_port:
+    for rule_ip, rule_port, rule_protocol, action in rules:
+        if (ip == rule_ip and
+            port == rule_port and
+            protocol == rule_protocol):
+
             print("Result:", action)
             return
 
@@ -81,14 +97,17 @@ def check_connection():
 # Display all firewall rules
 def display_rules():
     print("\nFirewall Rules")
-    print("-------------------------")
+    print("---------------------------------------------")
 
     if not rules:
         print("No rules found.")
         return
 
-    for ip, port, action in rules:
-        print(f"IP: {ip} | Port: {port} | Action: {action}")
+    for ip, port, protocol, action in rules:
+        print(
+            f"IP: {ip} | Port: {port} | "
+            f"Protocol: {protocol} | Action: {action}"
+        )
 
 
 # Main program
