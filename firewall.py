@@ -2,6 +2,13 @@ import datetime
 
 rules = []
 
+# Statistics
+total_connections = 0
+allowed_connections = 0
+blocked_connections = 0
+tcp_connections = 0
+udp_connections = 0
+
 
 # Validate IPv4 address
 def is_valid_ip(ip):
@@ -74,7 +81,7 @@ def add_rule():
     print("Rule added successfully!")
 
 
-# Write connection attempt to log file
+# Log connection
 def log_connection(ip, port, protocol, action):
     time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -86,6 +93,12 @@ def log_connection(ip, port, protocol, action):
 
 # Check a connection
 def check_connection():
+    global total_connections
+    global allowed_connections
+    global blocked_connections
+    global tcp_connections
+    global udp_connections
+
     ip = input("Enter IP address: ")
 
     if not is_valid_ip(ip):
@@ -95,15 +108,27 @@ def check_connection():
     port = get_valid_port()
     protocol = get_valid_protocol()
 
+    total_connections += 1
+
+    if protocol == "TCP":
+        tcp_connections += 1
+    else:
+        udp_connections += 1
+
     result = "BLOCK"
 
     for rule_ip, rule_port, rule_protocol, action in rules:
         if (ip == rule_ip and
-            port == rule_port and
-            protocol == rule_protocol):
+                port == rule_port and
+                protocol == rule_protocol):
 
             result = action
             break
+
+    if result == "ALLOW":
+        allowed_connections += 1
+    else:
+        blocked_connections += 1
 
     print("Result:", result)
 
@@ -124,6 +149,17 @@ def display_rules():
             f"IP: {ip} | Port: {port} | "
             f"Protocol: {protocol} | Action: {action}"
         )
+
+
+# Display firewall statistics
+def display_statistics():
+    print("\n===== FIREWALL STATISTICS =====")
+    print("--------------------------------")
+    print(f"Total Connections : {total_connections}")
+    print(f"Allowed           : {allowed_connections}")
+    print(f"Blocked           : {blocked_connections}")
+    print(f"TCP Connections   : {tcp_connections}")
+    print(f"UDP Connections   : {udp_connections}")
 
 
 # Display connection logs
@@ -151,7 +187,8 @@ while True:
     print("2. Check Connection")
     print("3. Display Rules")
     print("4. View Logs")
-    print("5. Exit")
+    print("5. View Statistics")
+    print("6. Exit")
 
     choice = input("Enter your choice: ")
 
@@ -168,6 +205,9 @@ while True:
         view_logs()
 
     elif choice == "5":
+        display_statistics()
+
+    elif choice == "6":
         print("Firewall Simulator closed.")
         break
 
