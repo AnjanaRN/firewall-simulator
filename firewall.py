@@ -1,4 +1,11 @@
-import datetime
+import json
+import os
+from datetime import datetime
+import ipaddress
+
+RULES_FILE = "rules.json"
+LOG_FILE = "firewall.log"
+MAX_LOGS = 20
 
 rules = []
 
@@ -10,25 +17,42 @@ tcp_connections = 0
 udp_connections = 0
 
 
-# Validate IPv4 address
-def is_valid_ip(ip):
-    parts = ip.split(".")
+# -------------------------------
+# LOAD AND SAVE RULES
+# -------------------------------
 
-    if len(parts) != 4:
-        return False
+def load_rules():
+    global rules
 
-    for part in parts:
-        if not part.isdigit():
-            return False
-
-        if int(part) < 0 or int(part) > 255:
-            return False
-
-    return True
+    if os.path.exists(RULES_FILE):
+        try:
+            with open(RULES_FILE, "r") as file:
+                rules = json.load(file)
+        except:
+            rules = []
 
 
-# Get a valid port number
-def get_valid_port():
+def save_rules():
+    with open(RULES_FILE, "w") as file:
+        json.dump(rules, file, indent=4)
+
+
+# -------------------------------
+# INPUT VALIDATION
+# -------------------------------
+
+def get_ip():
+    while True:
+        ip = input("Enter IP address: ")
+
+        try:
+            ipaddress.IPv4Address(ip)
+            return ip
+        except ValueError:
+            print("Invalid IP address. Try again.")
+
+
+def get_port():
     while True:
         try:
             port = int(input("Enter port number: "))
@@ -36,77 +60,99 @@ def get_valid_port():
             if 1 <= port <= 65535:
                 return port
 
-            print("Invalid port! Enter a number between 1 and 65535.")
+            print("Port must be between 1 and 65535.")
 
         except ValueError:
-            print("Invalid port! Please enter a number.")
+            print("Invalid port. Enter a number.")
 
 
-# Get a valid protocol
-def get_valid_protocol():
+def get_protocol():
     while True:
         protocol = input("Enter protocol (TCP/UDP): ").upper()
 
-        if protocol in ["TCP", "UDP"]:
+        if protocol == "TCP" or protocol == "UDP":
             return protocol
 
-        print("Invalid protocol! Enter TCP or UDP.")
+        print("Enter only TCP or UDP.")
 
 
-# Get a valid action
-def get_valid_action():
+def get_action():
     while True:
         action = input("Enter action (ALLOW/BLOCK): ").upper()
 
-        if action in ["ALLOW", "BLOCK"]:
+        if action == "ALLOW" or action == "BLOCK":
             return action
 
-        print("Invalid action! Enter ALLOW or BLOCK.")
+        print("Enter only ALLOW or BLOCK.")
 
 
-# Add a firewall rule
+# -------------------------------
+# ADD RULE
+# -------------------------------
+
 def add_rule():
-    ip = input("Enter IP address: ")
 
-    if not is_valid_ip(ip):
-        print("Invalid IP address!")
+    print("\n===== ADD FIREWALL RULE =====")
+
+    ip = get_ip()
+    port = get_port()
+    protocol = get_protocol()
+    action = get_action()
+
+    rule = {
+        "ip": ip,
+        "port": port,
+        "protocol": protocol,
+        "action": action
+    }
+
+    rules.append(rule)
+
+    save_rules()
+
+    print("\nRule added successfully!")
+
+
+# -------------------------------
+# DISPLAY RULES
+# -------------------------------
+
+def display_rules():
+
+    print("\n===== FIREWALL RULES =====")
+
+    if len(rules) == 0:
+        print("No firewall rules found.")
         return
 
-    port = get_valid_port()
-    protocol = get_valid_protocol()
-    action = get_valid_action()
+    for i, rule in enumerate(rules):
 
-    rules.append((ip, port, protocol, action))
-
-    print("Rule added successfully!")
-
-
-# Log connection
-def log_connection(ip, port, protocol, action):
-    time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-    with open("firewall.log", "a") as file:
-        file.write(
-            f"[{time}] {ip}:{port} {protocol} -> {action}\n"
+        print(
+            f"{i + 1}. "
+            f"IP: {rule['ip']} | "
+            f"Port: {rule['port']} | "
+            f"Protocol: {rule['protocol']} | "
+            f"Action: {rule['action']}"
         )
 
 
-# Check a connection
+# -------------------------------
+# CHECK CONNECTION
+# -------------------------------
+
 def check_connection():
+
     global total_connections
     global allowed_connections
     global blocked_connections
     global tcp_connections
     global udp_connections
 
-    ip = input("Enter IP address: ")
+    print("\n===== CHECK CONNECTION =====")
 
-    if not is_valid_ip(ip):
-        print("Invalid IP address!")
-        return
-
-    port = get_valid_port()
-    protocol = get_valid_protocol()
+    ip = get_ip()
+    port = get_port()
+    protocol = get_protocol()
 
     total_connections += 1
 
@@ -115,14 +161,18 @@ def check_connection():
     else:
         udp_connections += 1
 
+    # Default policy
     result = "BLOCK"
 
-    for rule_ip, rule_port, rule_protocol, action in rules:
-        if (ip == rule_ip and
-                port == rule_port and
-                protocol == rule_protocol):
+    # Check rules in order
+    for rule in rules:
 
-            result = action
+        if (
+            rule["ip"] == ip
+            and rule["port"] == port
+            and rule["protocol"] == protocol
+        ):
+            result = rule["action"]
             break
 
     if result == "ALLOW":
@@ -130,67 +180,259 @@ def check_connection():
     else:
         blocked_connections += 1
 
-    print("Result:", result)
+    print("\nConnection Result:", result)
 
-    log_connection(ip, port, protocol, result)
+    add_log(ip, port, protocol, result)
 
 
-# Display firewall rules
-def display_rules():
-    print("\nFirewall Rules")
-    print("---------------------------------------------")
+# -------------------------------
+# LOGGING
+# -------------------------------
 
-    if not rules:
-        print("No rules found.")
+def add_log(ip, port, protocol, result):
+
+    time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    new_log = (
+        f"[{time}] "
+        f"{ip}:{port} "
+        f"{protocol} -> {result}\n"
+    )
+
+    logs = []
+
+    if os.path.exists(LOG_FILE):
+
+        try:
+            with open(LOG_FILE, "r") as file:
+                logs = file.readlines()
+
+        except:
+            logs = []
+
+    logs.append(new_log)
+
+    # Keep only latest 20 logs
+    logs = logs[-MAX_LOGS:]
+
+    with open(LOG_FILE, "w") as file:
+        file.writelines(logs)
+
+
+# -------------------------------
+# VIEW LOGS
+# -------------------------------
+
+def view_logs():
+
+    print("\n===== FIREWALL LOGS =====")
+
+    if not os.path.exists(LOG_FILE):
+        print("No logs found.")
         return
 
-    for ip, port, protocol, action in rules:
+    with open(LOG_FILE, "r") as file:
+        logs = file.readlines()
+
+    if len(logs) == 0:
+        print("No logs found.")
+        return
+
+    for log in logs:
+        print(log, end="")
+
+
+# -------------------------------
+# CLEAR LOGS
+# -------------------------------
+
+def clear_logs():
+
+    if not os.path.exists(LOG_FILE):
+        print("\nNo logs found.")
+        return
+
+    confirm = input(
+        "\nClear all logs? (Y/N): "
+    ).upper()
+
+    if confirm == "Y":
+
+        open(LOG_FILE, "w").close()
+
+        print("Logs cleared successfully.")
+
+    else:
+        print("Operation cancelled.")
+
+
+# -------------------------------
+# EDIT RULE
+# -------------------------------
+
+def edit_rule():
+
+    if len(rules) == 0:
+        print("\nNo rules available.")
+        return
+
+    display_rules()
+
+    try:
+        number = int(
+            input("\nEnter rule number to edit: ")
+        )
+
+        if number < 1 or number > len(rules):
+            print("Invalid rule number.")
+            return
+
+    except ValueError:
+        print("Invalid input.")
+        return
+
+    index = number - 1
+
+    print("\nEnter new rule details:")
+
+    rules[index] = {
+        "ip": get_ip(),
+        "port": get_port(),
+        "protocol": get_protocol(),
+        "action": get_action()
+    }
+
+    save_rules()
+
+    print("\nRule updated successfully!")
+
+
+# -------------------------------
+# DELETE RULE
+# -------------------------------
+
+def delete_rule():
+
+    if len(rules) == 0:
+        print("\nNo rules available.")
+        return
+
+    display_rules()
+
+    try:
+        number = int(
+            input("\nEnter rule number to delete: ")
+        )
+
+        if number < 1 or number > len(rules):
+            print("Invalid rule number.")
+            return
+
+    except ValueError:
+        print("Invalid input.")
+        return
+
+    confirm = input(
+        "Delete this rule? (Y/N): "
+    ).upper()
+
+    if confirm == "Y":
+
+        rules.pop(number - 1)
+
+        save_rules()
+
+        print("Rule deleted successfully.")
+
+    else:
+        print("Operation cancelled.")
+
+
+# -------------------------------
+# STATISTICS
+# -------------------------------
+
+def statistics():
+
+    print("\n===== FIREWALL STATISTICS =====")
+
+    print(
+        "Total Connections :",
+        total_connections
+    )
+
+    print(
+        "Allowed           :",
+        allowed_connections
+    )
+
+    print(
+        "Blocked           :",
+        blocked_connections
+    )
+
+    print(
+        "TCP Connections   :",
+        tcp_connections
+    )
+
+    print(
+        "UDP Connections   :",
+        udp_connections
+    )
+
+    if total_connections > 0:
+
+        allowed_percent = (
+            allowed_connections
+            / total_connections
+        ) * 100
+
+        blocked_percent = (
+            blocked_connections
+            / total_connections
+        ) * 100
+
         print(
-            f"IP: {ip} | Port: {port} | "
-            f"Protocol: {protocol} | Action: {action}"
+            f"Allowed Percentage : "
+            f"{allowed_percent:.2f}%"
+        )
+
+        print(
+            f"Blocked Percentage : "
+            f"{blocked_percent:.2f}%"
         )
 
 
-# Display firewall statistics
-def display_statistics():
-    print("\n===== FIREWALL STATISTICS =====")
-    print("--------------------------------")
-    print(f"Total Connections : {total_connections}")
-    print(f"Allowed           : {allowed_connections}")
-    print(f"Blocked           : {blocked_connections}")
-    print(f"TCP Connections   : {tcp_connections}")
-    print(f"UDP Connections   : {udp_connections}")
+# -------------------------------
+# MAIN PROGRAM
+# -------------------------------
+
+load_rules()
+
+print("\n================================")
+print("       FIREWALL SIMULATOR")
+print("================================")
+
+print(
+    f"{len(rules)} rule(s) loaded."
+)
 
 
-# Display connection logs
-def view_logs():
-    print("\nFirewall Activity Logs")
-    print("---------------------------------------------")
-
-    try:
-        with open("firewall.log", "r") as file:
-            logs = file.read()
-
-            if logs:
-                print(logs)
-            else:
-                print("No logs found.")
-
-    except FileNotFoundError:
-        print("No logs found.")
-
-
-# Main program
 while True:
-    print("\n===== FIREWALL SIMULATOR =====")
-    print("1. Add Rule")
+
+    print("\n===== MENU =====")
+    print("1. Add Firewall Rule")
     print("2. Check Connection")
     print("3. Display Rules")
-    print("4. View Logs")
-    print("5. View Statistics")
-    print("6. Exit")
+    print("4. Edit Rule")
+    print("5. Delete Rule")
+    print("6. View Logs")
+    print("7. Clear Logs")
+    print("8. View Statistics")
+    print("9. Exit")
 
-    choice = input("Enter your choice: ")
+    choice = input("\nEnter your choice: ")
 
     if choice == "1":
         add_rule()
@@ -202,14 +444,23 @@ while True:
         display_rules()
 
     elif choice == "4":
-        view_logs()
+        edit_rule()
 
     elif choice == "5":
-        display_statistics()
+        delete_rule()
 
     elif choice == "6":
-        print("Firewall Simulator closed.")
+        view_logs()
+
+    elif choice == "7":
+        clear_logs()
+
+    elif choice == "8":
+        statistics()
+
+    elif choice == "9":
+        print("\nFirewall Simulator closed.")
         break
 
     else:
-        print("Invalid choice!")
+        print("\nInvalid choice. Enter 1-9.")
